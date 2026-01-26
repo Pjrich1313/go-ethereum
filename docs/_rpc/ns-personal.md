@@ -86,7 +86,7 @@ If the passphrase is not supplied as an argument, the console will prompt for
 the passphrase interactively.
 
 The unencrypted key will be held in memory until the unlock duration expires.
-If the unlock duration defaults to 300 seconds. An explicit duration
+If the unlock duration is not specified it defaults to 300 seconds. An explicit duration
 of zero seconds unlocks the key until geth exits.
 
 The account can be used with `eth_sign` and `eth_sendTransaction` while it is unlocked.
@@ -126,7 +126,7 @@ true
 
 Validate the given passphrase and submit transaction.
 
-The transaction is the same argument as for `eth_sendTransaction` and contains the `from` address. If the passphrase can be used to decrypt the private key belogging to `tx.from` the transaction is verified, signed and send onto the network. The account is not unlocked globally in the node and cannot be used in other RPC calls.
+The transaction is the same argument as for `eth_sendTransaction` and contains the `from` address. If the passphrase can be used to decrypt the private key belonging to `tx.from` the transaction is verified, signed and send onto the network. The account is not unlocked globally in the node and cannot be used in other RPC calls.
 
 | Client   | Method invocation                                                |
 | :--------| -----------------------------------------------------------------|
@@ -148,7 +148,7 @@ undefined
 ### personal_sign
 
 The sign method calculates an Ethereum specific signature with:
-`sign(keccack256("\x19Ethereum Signed Message:\n" + len(message) + message)))`.
+`sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) + message)))`.
 
 By adding a prefix to the message makes the calculated signature recognisable as an Ethereum specific signature. This prevents misuse where a malicious DApp can sign arbitrary data (e.g. transaction) and use the signature to impersonate the victim.
 
