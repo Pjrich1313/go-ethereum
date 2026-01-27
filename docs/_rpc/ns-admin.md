@@ -199,7 +199,7 @@ The `stopRPC` administrative method closes the currently open HTTP RPC endpoint.
 |:--------|---------------------------------|
 | Go      | `admin.StopRPC() (bool, error`) |
 | Console | `admin.stopRPC()`               |
-| RPC     | `{"method": "admin_stopRPC"`    |
+| RPC     | `{"method": "admin_stopRPC"}`   |
 
 #### Example
 
@@ -216,7 +216,7 @@ The `stopWS` administrative method closes the currently open WebSocket RPC endpo
 |:--------|--------------------------------|
 | Go      | `admin.StopWS() (bool, error`) |
 | Console | `admin.stopWS()`               |
-| RPC     | `{"method": "admin_stopWS"`    |
+| RPC     | `{"method": "admin_stopWS"}`   |
 
 #### Example
 
