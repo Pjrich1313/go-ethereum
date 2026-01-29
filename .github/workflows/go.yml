@@ -1,3 +1,5 @@
+name: Go Tests
+
 on:
   push:
     branches:
@@ -10,7 +12,7 @@ on:
 jobs:
   lint:
     name: Lint
-    runs-on: [self-hosted-ghr, size-s-x64]
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
       with:
@@ -25,8 +27,8 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24'
-        cache: false
+        go-version: '1.23'
+        cache: true
 
     - name: Run linters
       run: |
@@ -37,7 +39,7 @@ jobs:
   keeper:
     name: Keeper Builds
     needs: test
-    runs-on: [self-hosted-ghr, size-l-x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,8 +48,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
-          cache: false
+          go-version: '1.23'
+          cache: true
 
       - name: Build
         run: go run build/ci.go keeper
@@ -55,7 +57,7 @@ jobs:
   test-32bit:
     name: "32bit tests"
     needs: test
-    runs-on: [self-hosted-ghr, size-l-x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -64,13 +66,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
-          cache: false
+          go-version: '1.23'
+          cache: true
 
       - name: Install cross toolchain
         run: |
-          apt-get update
-          apt-get -yq --no-install-suggests --no-install-recommends install gcc-multilib
+          sudo apt-get update
+          sudo apt-get -yq --no-install-suggests --no-install-recommends install gcc-multilib
 
       - name: Build
         run: go run build/ci.go test -arch 386 -short -p 8
@@ -78,12 +80,12 @@ jobs:
   test:
     name: Test
     needs: lint
-    runs-on: [self-hosted-ghr, size-l-x64]
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         go:
-          - '1.24'
           - '1.23'
+          - '1.22'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -93,7 +95,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
-          cache: false
+          cache: true
 
       - name: Run tests
         run: go run build/ci.go test -p 8
