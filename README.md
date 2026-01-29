@@ -244,6 +244,27 @@ For contributions to the [go-ethereum website](https://geth.ethereum.org), pleas
 For more detailed instructions please see the `website` branch [README](https://github.com/ethereum/go-ethereum/tree/website#readme) or the 
 [contributing](https://geth.ethereum.org/docs/developers/geth-developer/contributing) page of the website.
 
+## Sponsorship
+
+If you'd like to support the development of go-ethereum and related projects, you can sponsor contributors through GitHub Sponsors. 
+
+### Setting Up GitHub Sponsors
+
+We've created comprehensive guides to help you set up GitHub Sponsors with Stripe payouts:
+
+- **[Quick Start Guide](docs/GITHUB_SPONSORS_QUICKSTART.md)** - Get started in ~45 minutes
+- **[Detailed Setup Guide](docs/GITHUB_SPONSORS_SETUP.md)** - Complete step-by-step instructions
+
+These guides cover:
+- Enabling two-factor authentication
+- Creating a GitHub Sponsors profile
+- Connecting Stripe for payouts
+- Adding payment methods (bank account or debit card)
+- Completing tax forms
+- Getting your profile approved
+
+To enable the Sponsor button on your repository, see the [FUNDING.yml configuration guide](docs/GITHUB_SPONSORS_SETUP.md#enabling-github-sponsors-button-for-your-repository).
+
 ## License
 
 The go-ethereum library (i.e. all code outside of the `cmd` directory) is licensed under the
