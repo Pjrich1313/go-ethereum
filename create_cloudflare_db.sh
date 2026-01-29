@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+
 # Copyright 2025 The go-ethereum Authors
 # This script creates a Cloudflare D1 database using the Cloudflare API.
 #
@@ -32,8 +34,22 @@
 #   <TOKEN> - Your Cloudflare API token with D1 permissions
 #   <database_name> - The name for your new D1 database
 
+ACCOUNT_ID="<account_id>"
+TOKEN="<TOKEN>"
+DATABASE_NAME="<database_name>"
+
+# Validate that placeholders have been replaced
+if [[ "$ACCOUNT_ID" == "<account_id>" ]] || [[ "$TOKEN" == "<TOKEN>" ]] || [[ "$DATABASE_NAME" == "<database_name>" ]]; then
+  echo "Error: Please replace the placeholders in this script before running it." >&2
+  echo "You need to set:" >&2
+  echo "  - ACCOUNT_ID: Your Cloudflare account ID" >&2
+  echo "  - TOKEN: Your Cloudflare API token" >&2
+  echo "  - DATABASE_NAME: Your desired database name" >&2
+  exit 1
+fi
+
 curl -X POST \
-  "https://api.cloudflare.com/client/v4/accounts/<account_id>/d1/database" \
-  -H "Authorization: Bearer <TOKEN>" \
+  "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/d1/database" \
+  -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" \
-  --data '{"name":"<database_name>"}'
+  --data "{\"name\":\"${DATABASE_NAME}\"}"
