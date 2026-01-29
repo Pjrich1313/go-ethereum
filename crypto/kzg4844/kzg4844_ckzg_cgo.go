@@ -143,14 +143,14 @@ func ckzgComputeCellProofs(blob *Blob) ([]Proof, error) {
 	if err != nil {
 		return []Proof{}, err
 	}
-	var p []Proof
-	for _, proof := range proofs {
-		p = append(p, (Proof)(proof))
+	p := make([]Proof, len(proofs))
+	for i, proof := range proofs {
+		p[i] = (Proof)(proof)
 	}
 	return p, nil
 }
 
-// ckzgVerifyCellProofs verifies that the blob data corresponds to the provided commitment.
+// ckzgVerifyCellProofBatch verifies that the blob data corresponds to the provided commitment.
 func ckzgVerifyCellProofBatch(blobs []Blob, commitments []Commitment, cellProofs []Proof) error {
 	ckzgIniter.Do(ckzgInit)
 	var (
