@@ -1,0 +1,37 @@
+name: Deploy to Cloudflare Workers
+
+# Trigger on push to main branch
+on:
+  push:
+    branches:
+      - main
+  # Allow manual workflow dispatch for testing
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy Worker to Cloudflare
+    runs-on: ubuntu-latest
+
+    # Explicitly specify minimal permissions
+    permissions:
+      contents: read
+
+    steps:
+      # Checkout repository code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Install dependencies if package.json exists
+      - name: Install dependencies
+        run: |
+          if [ -f package.json ]; then
+            npm install
+          fi
+
+      # Deploy to Cloudflare Workers using Wrangler action
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

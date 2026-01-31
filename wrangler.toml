@@ -1,0 +1,14 @@
+name = "go-ethereum-worker"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# Account ID will be provided via environment variable CLOUDFLARE_ACCOUNT_ID
+# account_id = ""
+
+# Configure worker settings
+workers_dev = true
+
+# Environment-specific configuration
+[env.production]
+name = "go-ethereum-worker-production"
+route = ""
