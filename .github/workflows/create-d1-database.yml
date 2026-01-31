@@ -1,0 +1,60 @@
+# This workflow creates a Cloudflare D1 database with EU jurisdiction
+# 
+# Prerequisites:
+# - CLOUDFLARE_API_TOKEN: Your Cloudflare API token with D1 database permissions
+# - CLOUDFLARE_ACCOUNT_ID: Your Cloudflare account ID
+#
+# Setup Instructions:
+# 1. Generate a Cloudflare API token at https://dash.cloudflare.com/profile/api-tokens
+#    - The token needs "Account.D1" permissions
+# 2. Find your Cloudflare account ID in the Cloudflare dashboard
+# 3. Add both values as repository secrets in GitHub:
+#    - Go to Settings > Secrets and variables > Actions
+#    - Add CLOUDFLARE_API_TOKEN
+#    - Add CLOUDFLARE_ACCOUNT_ID
+
+name: Create Cloudflare D1 Database
+
+on:
+  # Trigger on push to main branch
+  push:
+    branches:
+      - main
+  # Allow manual workflow dispatch
+  # Note: Since database names are unique, this workflow will fail on repeated
+  # executions once the database is created. Use workflow_dispatch for manual runs.
+  workflow_dispatch:
+
+jobs:
+  create-database:
+    name: Create D1 Database with EU Jurisdiction
+    runs-on: ubuntu-latest
+    
+    # Minimal permissions for GITHUB_TOKEN
+    permissions:
+      contents: read
+    
+    steps:
+      # Checkout repository code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Set up Node.js environment
+      - name: Set up Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      # Install Wrangler CLI globally
+      - name: Install Wrangler
+        run: npm install -g wrangler
+
+      # Create D1 database with EU jurisdiction
+      # The database will be created with the name "db-with-jurisdiction"
+      # and will be hosted in the EU region
+      # Note: This command will fail if a database with the same name already exists
+      - name: Create D1 Database
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: wrangler d1 create db-with-jurisdiction --jurisdiction=eu
