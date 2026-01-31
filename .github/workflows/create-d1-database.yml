@@ -30,6 +30,10 @@ jobs:
     name: Create D1 Database with EU Jurisdiction
     runs-on: ubuntu-latest
     
+    # Minimal permissions for GITHUB_TOKEN
+    permissions:
+      contents: read
+    
     steps:
       # Checkout repository code
       - name: Checkout repository
