@@ -1,6 +1,6 @@
 /**
  * Cloudflare Worker for go-ethereum
- * 
+ *
  * This is a simple API endpoint that provides information about the go-ethereum project.
  * It can be extended to provide various functionalities such as:
  * - API endpoints for blockchain data
@@ -9,10 +9,36 @@
  * - Webhook handlers
  */
 
+/**
+ * Generate CORS headers for the response
+ * In production, configure allowed origins in your wrangler.toml environment variables.
+ * Add ALLOWED_ORIGINS variable with comma-separated list of allowed domains.
+ */
+function getCorsHeaders(request, env) {
+  const origin = request.headers.get('Origin');
+  const allowedOrigins = env?.ALLOWED_ORIGINS?.split(',') || [];
+
+  // Check if the origin is in the allowed list
+  const isAllowedOrigin = allowedOrigins.length === 0 || allowedOrigins.includes(origin);
+
+  return {
+    'Access-Control-Allow-Origin': isAllowedOrigin && origin ? origin : (allowedOrigins[0] || 'null'),
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    
+
+    // Handle CORS preflight requests
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: getCorsHeaders(request, env)
+      });
+    }
+
     // Handle different routes
     if (url.pathname === '/') {
       return new Response(JSON.stringify({
@@ -27,11 +53,11 @@ export default {
       }), {
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
+          ...getCorsHeaders(request, env)
         }
       });
     }
-    
+
     if (url.pathname === '/health') {
       return new Response(JSON.stringify({
         status: 'healthy',
@@ -39,11 +65,11 @@ export default {
       }), {
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
+          ...getCorsHeaders(request, env)
         }
       });
     }
-    
+
     if (url.pathname === '/info') {
       return new Response(JSON.stringify({
         project: 'go-ethereum',
@@ -54,11 +80,11 @@ export default {
       }), {
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
+          ...getCorsHeaders(request, env)
         }
       });
     }
-    
+
     // 404 for unknown routes
     return new Response('Not Found', { status: 404 });
   }

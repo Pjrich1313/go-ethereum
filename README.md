@@ -326,6 +326,13 @@ The worker configuration is defined in `wrangler.toml`. You can customize:
 - Environment variables
 - Compatibility settings
 
+**Security Note**: The worker includes CORS headers for cross-origin requests. For production use, you should configure allowed origins through environment variables in your `wrangler.toml`:
+
+```toml
+[env.production.vars]
+ALLOWED_ORIGINS = "https://yourdomain.com,https://app.yourdomain.com"
+```
+
 For more information about Cloudflare Workers, see the [Cloudflare Workers documentation](https://developers.cloudflare.com/workers/).
 
 ## License
