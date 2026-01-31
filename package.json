@@ -1,0 +1,21 @@
+{
+  "name": "go-ethereum-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker for go-ethereum project",
+  "main": "worker.js",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "ethereum",
+    "geth"
+  ],
+  "author": "",
+  "license": "GPL-3.0",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

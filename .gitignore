@@ -57,3 +57,8 @@ cmd/geth/geth
 cmd/rlpdump/rlpdump
 cmd/workload/workload
 cmd/keeper/keeper
+
+# Node.js dependencies (for Cloudflare Workers)
+node_modules/
+package-lock.json
+.wrangler/

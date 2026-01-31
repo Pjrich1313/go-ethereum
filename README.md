@@ -266,6 +266,75 @@ These guides cover:
 
 To enable the Sponsor button on your repository, see the [FUNDING.yml configuration guide](docs/GITHUB_SPONSORS_SETUP.md#enabling-github-sponsors-button-for-your-repository).
 
+## Cloudflare Workers Deployment
+
+This repository includes a Cloudflare Worker that provides API endpoints for the go-ethereum project. The worker is automatically deployed to Cloudflare Workers on every push to the `main` branch.
+
+### Setup Instructions
+
+To enable automatic deployment to Cloudflare Workers, you need to configure the following GitHub repository secrets:
+
+1. **CLOUDFLARE_API_TOKEN**: Your Cloudflare API token with Workers deployment permissions
+   - Generate a token at [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+   - Required permissions: "Account.Workers Scripts.Edit"
+
+2. **CLOUDFLARE_ACCOUNT_ID**: Your Cloudflare account ID
+   - Find this in your Cloudflare dashboard URL or account settings
+   - Format: 32-character alphanumeric string
+
+### Adding Secrets to GitHub
+
+1. Navigate to your repository on GitHub
+2. Go to **Settings** > **Secrets and variables** > **Actions**
+3. Click **New repository secret**
+4. Add both secrets:
+   - Name: `CLOUDFLARE_API_TOKEN`, Value: Your Cloudflare API token
+   - Name: `CLOUDFLARE_ACCOUNT_ID`, Value: Your Cloudflare account ID
+
+### Worker Endpoints
+
+Once deployed, the Cloudflare Worker provides the following endpoints:
+
+- `/` - Information about the worker and available endpoints
+- `/health` - Health check endpoint
+- `/info` - Project information and links
+
+### Local Development
+
+To test the worker locally:
+
+```shell
+# Install dependencies
+npm install
+
+# Start local development server
+npm run dev
+```
+
+To manually deploy the worker:
+
+```shell
+# Deploy to Cloudflare Workers
+npm run deploy
+```
+
+### Configuration
+
+The worker configuration is defined in `wrangler.toml`. You can customize:
+- Worker name
+- Routes and domains
+- Environment variables
+- Compatibility settings
+
+**Security Note**: The worker includes CORS headers for cross-origin requests. For production use, you should configure allowed origins through environment variables in your `wrangler.toml`:
+
+```toml
+[env.production.vars]
+ALLOWED_ORIGINS = "https://yourdomain.com,https://app.yourdomain.com"
+```
+
+For more information about Cloudflare Workers, see the [Cloudflare Workers documentation](https://developers.cloudflare.com/workers/).
+
 ## License
 
 The go-ethereum library (i.e. all code outside of the `cmd` directory) is licensed under the
