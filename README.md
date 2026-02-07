@@ -266,6 +266,14 @@ These guides cover:
 
 To enable the Sponsor button on your repository, see the [FUNDING.yml configuration guide](docs/GITHUB_SPONSORS_SETUP.md#enabling-github-sponsors-button-for-your-repository).
 
+### Alternative: PayPal Integration
+
+If you prefer to accept donations via PayPal, see our **[PayPal Setup Guide](docs/PAYPAL_SETUP.md)** which covers:
+- Creating a PayPal Business account
+- Getting your PayPal Client ID
+- Integrating the PayPal SDK: `<script src="https://www.paypal.com/sdk/js?client-id=YOUR_CLIENT_ID"></script>`
+- Adding PayPal to your GitHub FUNDING.yml
+
 ## Cloudflare Workers Deployment
 
 This repository includes a Cloudflare Worker that provides API endpoints for the go-ethereum project. The worker is automatically deployed to Cloudflare Workers on every push to the `main` branch.
