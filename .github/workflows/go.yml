@@ -1,3 +1,5 @@
+name: Go CI
+
 on:
   push:
     branches:
