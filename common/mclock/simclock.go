@@ -72,6 +72,20 @@ func (s *Simulated) Run(d time.Duration) {
 	}
 }
 
+// Rewind moves the clock back by the given duration. It does not run any timers.
+// It panics if d is negative.
+func (s *Simulated) Rewind(d time.Duration) {
+	if d < 0 {
+		panic("mclock: negative rewind duration")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.init()
+
+	s.now = s.now.Add(-d)
+	s.cond.Broadcast()
+}
+
 // ActiveTimers returns the number of timers that haven't fired.
 func (s *Simulated) ActiveTimers() int {
 	s.mu.RLock()

@@ -144,6 +144,34 @@ func TestSimulatedTimerReset(t *testing.T) {
 	}
 }
 
+func TestSimulatedRewind(t *testing.T) {
+	var (
+		c      Simulated
+		offset = 1 * time.Hour
+	)
+	c.Run(offset)
+	if c.Now() != AbsTime(offset) {
+		t.Fatalf("unexpected time after Run: got %v, want %v", c.Now(), AbsTime(offset))
+	}
+	c.Rewind(30 * time.Minute)
+	want := AbsTime(30 * time.Minute)
+	if c.Now() != want {
+		t.Fatalf("unexpected time after Rewind: got %v, want %v", c.Now(), want)
+	}
+	// Timers scheduled after the rewind should fire at the correct time.
+	ch := c.After(30 * time.Minute)
+	c.Run(30 * time.Minute)
+	select {
+	case stamp := <-ch:
+		wantStamp := AbsTime(60 * time.Minute)
+		if stamp != wantStamp {
+			t.Errorf("wrong timer stamp: got %v, want %v", stamp, wantStamp)
+		}
+	default:
+		t.Fatal("timer didn't fire after Rewind")
+	}
+}
+
 func TestSimulatedTimerStop(t *testing.T) {
 	var (
 		c       Simulated
