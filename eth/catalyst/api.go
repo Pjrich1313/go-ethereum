@@ -393,7 +393,7 @@ func (api *ConsensusAPI) ExchangeTransitionConfigurationV1(config engine.Transit
 func (api *ConsensusAPI) GetPayloadV1(payloadID engine.PayloadID) (*engine.ExecutableData, error) {
 	data, err := api.getPayload(
 		payloadID,
-		false,
+		true,
 		[]engine.PayloadVersion{engine.PayloadV1},
 		nil,
 	)
@@ -407,7 +407,7 @@ func (api *ConsensusAPI) GetPayloadV1(payloadID engine.PayloadID) (*engine.Execu
 func (api *ConsensusAPI) GetPayloadV2(payloadID engine.PayloadID) (*engine.ExecutionPayloadEnvelope, error) {
 	return api.getPayload(
 		payloadID,
-		false,
+		true,
 		[]engine.PayloadVersion{engine.PayloadV1, engine.PayloadV2},
 		[]forks.Fork{forks.Shanghai},
 	)
@@ -418,7 +418,7 @@ func (api *ConsensusAPI) GetPayloadV2(payloadID engine.PayloadID) (*engine.Execu
 func (api *ConsensusAPI) GetPayloadV3(payloadID engine.PayloadID) (*engine.ExecutionPayloadEnvelope, error) {
 	return api.getPayload(
 		payloadID,
-		false,
+		true,
 		[]engine.PayloadVersion{engine.PayloadV3},
 		[]forks.Fork{forks.Cancun},
 	)
@@ -429,7 +429,7 @@ func (api *ConsensusAPI) GetPayloadV3(payloadID engine.PayloadID) (*engine.Execu
 func (api *ConsensusAPI) GetPayloadV4(payloadID engine.PayloadID) (*engine.ExecutionPayloadEnvelope, error) {
 	return api.getPayload(
 		payloadID,
-		false,
+		true,
 		[]engine.PayloadVersion{engine.PayloadV3},
 		[]forks.Fork{forks.Prague},
 	)
@@ -443,7 +443,7 @@ func (api *ConsensusAPI) GetPayloadV4(payloadID engine.PayloadID) (*engine.Execu
 func (api *ConsensusAPI) GetPayloadV5(payloadID engine.PayloadID) (*engine.ExecutionPayloadEnvelope, error) {
 	return api.getPayload(
 		payloadID,
-		false,
+		true,
 		[]engine.PayloadVersion{engine.PayloadV3},
 		[]forks.Fork{
 			forks.Osaka,
