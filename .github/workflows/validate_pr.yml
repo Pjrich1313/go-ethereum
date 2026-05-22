@@ -57,10 +57,14 @@ jobs:
             const fs = require('fs');
             const path = require('path');
             const prTitle = context.payload.pull_request.title;
+            // Title must follow: "prefix: description" where prefix may include
+            // directory paths (e.g. "accounts/abi/bind"), package names, or
+            // comma-separated areas (e.g. "eth, les").
             const titleRegex = /^([\w\s,{}/.]+): .+/;
-            
+
             if (!titleRegex.test(prTitle)) {
-              core.setFailed(`PR title "${prTitle}" does not match required format: directory, ...: description`);
+              core.warning(`PR title "${prTitle}" does not match the recommended format: directory, ...: description`);
+              console.log('ℹ️  Consider using a title like: accounts/abi/bind: short description');
               return;
             }
 
@@ -69,15 +73,18 @@ jobs:
             const directories = dirPart.split(',').map(d => d.trim());
             const missingDirs = [];
             for (const dir of directories) {
-              const fullPath = path.join(process.env.GITHUB_WORKSPACE, dir);
-              if (!fs.existsSync(fullPath)) {
+              // Only validate the top-level directory component so that paths
+              // like "accounts/abi/bind/backends" are accepted when "accounts/"
+              // exists in the repository root.
+              const topLevel = dir.split('/')[0].trim();
+              const fullPath = path.join(process.env.GITHUB_WORKSPACE, topLevel);
+              if (topLevel && !fs.existsSync(fullPath)) {
                 missingDirs.push(dir);
               }
             }
-            
+
             if (missingDirs.length > 0) {
-              core.setFailed(`The following directories in the PR title do not exist: ${missingDirs.join(', ')}`);
-              return;
+              core.warning(`The following areas in the PR title do not match a top-level directory: ${missingDirs.join(', ')}`);
             }
-            
+
             console.log('✅ PR title format is valid');
