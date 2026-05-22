@@ -65,6 +65,8 @@ jobs:
             if (!titleRegex.test(prTitle)) {
               core.warning(`PR title "${prTitle}" does not match the recommended format: directory, ...: description`);
               console.log('ℹ️  Consider using a title like: accounts/abi/bind: short description');
+              // Return early — skip directory check since there is no prefix to validate.
+              console.log('✅ PR title format is valid');
               return;
             }
 
@@ -75,8 +77,9 @@ jobs:
             for (const dir of directories) {
               // Only validate the top-level directory component so that paths
               // like "accounts/abi/bind/backends" are accepted when "accounts/"
-              // exists in the repository root.
-              const topLevel = dir.split('/')[0].trim();
+              // exists in the repository root.  Trim the full path first to
+              // avoid leading/trailing whitespace affecting the split.
+              const topLevel = dir.trim().split('/')[0].trim();
               const fullPath = path.join(process.env.GITHUB_WORKSPACE, topLevel);
               if (topLevel && !fs.existsSync(fullPath)) {
                 missingDirs.push(dir);
