@@ -91,3 +91,4 @@ jobs:
             }
 
             console.log('✅ PR title format is valid');
+
