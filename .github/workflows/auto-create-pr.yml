@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Create pull request when none exists
-        uses: actions/github-script@v7
+        uses: actions/github-script@v7.0.1
         env:
           SOURCE_BRANCH: ${{ github.event.inputs.source_branch || 'master' }}
           TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'main' }}
@@ -58,14 +58,14 @@ jobs:
             try {
               await github.rest.repos.getBranch({ owner, repo, branch: source });
             } catch (error) {
-              core.setFailed(`Source branch does not exist: ${source}`);
+              core.setFailed(`Source branch does not exist: ${source}. Error: ${error.message}`);
               return;
             }
 
             try {
               await github.rest.repos.getBranch({ owner, repo, branch: target });
             } catch (error) {
-              core.setFailed(`Target branch does not exist: ${target}`);
+              core.setFailed(`Target branch does not exist: ${target}. Error: ${error.message}`);
               return;
             }
 
