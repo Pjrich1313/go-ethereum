@@ -31,13 +31,13 @@ function getCorsHeaders(request, env) {
 /**
  * Fetch live ETH balances for a list of addresses via go-ethereum JSON-RPC.
  * Returns an array of { address, balanceWei, balanceEth } objects.
+ * Requests are issued concurrently via Promise.all to minimise latency.
  *
  * @param {string[]} addresses - Ethereum addresses to query
  * @param {string} rpcUrl     - go-ethereum (or compatible) JSON-RPC endpoint URL
  */
 async function fetchEthBalances(addresses, rpcUrl) {
-  const results = [];
-  for (const address of addresses) {
+  const requests = addresses.map(async (address) => {
     const response = await fetch(rpcUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -48,12 +48,27 @@ async function fetchEthBalances(addresses, rpcUrl) {
         id: 1,
       }),
     });
+
+    if (!response.ok) {
+      throw new Error(`eth_getBalance failed for ${address}: HTTP ${response.status}`);
+    }
+
     const data = await response.json();
     const balanceWei = BigInt(data.result || '0x0');
-    const balanceEth = (Number(balanceWei) / 1e18).toFixed(6);
-    results.push({ address, balanceWei: balanceWei.toString(), balanceEth });
-  }
-  return results;
+
+    // Compute ETH value using BigInt arithmetic to avoid floating-point
+    // precision loss for large balances (>2^53 wei).
+    const WEI_PER_ETH = 10n ** 18n;
+    const SCALE = 10n ** 6n;
+    const integerPart = balanceWei / WEI_PER_ETH;
+    const remainder = balanceWei % WEI_PER_ETH;
+    const decimalPart = (remainder * SCALE) / WEI_PER_ETH;
+    const balanceEth = `${integerPart}.${decimalPart.toString().padStart(6, '0')}`;
+
+    return { address, balanceWei: balanceWei.toString(), balanceEth };
+  });
+
+  return Promise.all(requests);
 }
 
 export default {
@@ -213,11 +228,14 @@ export default {
         now,
       ).run();
 
-      // 7. Persist individual balance records for audit trail
-      for (const bal of balancesSnapshot) {
-        await env.DB.prepare(
-          `INSERT OR REPLACE INTO balances (address, balance_eth, recorded_at) VALUES (?, ?, ?)`
-        ).bind(bal.address, bal.balanceEth, now).run();
+      // 7. Persist individual balance records in a single batched transaction
+      if (balancesSnapshot.length > 0) {
+        const balanceInserts = balancesSnapshot.map((bal) =>
+          env.DB.prepare(
+            `INSERT OR REPLACE INTO balances (address, balance_eth, recorded_at) VALUES (?, ?, ?)`
+          ).bind(bal.address, bal.balanceEth, now)
+        );
+        await env.DB.batch(balanceInserts);
       }
 
       return new Response(JSON.stringify({

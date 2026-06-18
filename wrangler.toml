@@ -14,9 +14,6 @@ workers_dev = true
 binding      = "DB"
 database_name = "go-ethereum-worker-db"
 database_id  = "<YOUR_D1_DATABASE_ID>"
-
-# Migrations directory for `wrangler d1 migrations apply`
-[migrations]
 migrations_dir = "migrations"
 
 # Worker environment variables.
