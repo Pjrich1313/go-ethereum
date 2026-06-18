@@ -23,9 +23,52 @@ function getCorsHeaders(request, env) {
 
   return {
     'Access-Control-Allow-Origin': isAllowedOrigin && origin ? origin : (allowedOrigins[0] || 'null'),
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Webhook-Secret',
   };
+}
+
+/**
+ * Fetch live ETH balances for a list of addresses via go-ethereum JSON-RPC.
+ * Returns an array of { address, balanceWei, balanceEth } objects.
+ * Requests are issued concurrently via Promise.all to minimise latency.
+ *
+ * @param {string[]} addresses - Ethereum addresses to query
+ * @param {string} rpcUrl     - go-ethereum (or compatible) JSON-RPC endpoint URL
+ */
+async function fetchEthBalances(addresses, rpcUrl) {
+  const requests = addresses.map(async (address) => {
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'eth_getBalance',
+        params: [address, 'latest'],
+        id: 1,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`eth_getBalance failed for ${address}: HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    const balanceWei = BigInt(data.result || '0x0');
+
+    // Compute ETH value using BigInt arithmetic to avoid floating-point
+    // precision loss for large balances (>2^53 wei).
+    const WEI_PER_ETH = 10n ** 18n;
+    const SCALE = 10n ** 6n;
+    const integerPart = balanceWei / WEI_PER_ETH;
+    const remainder = balanceWei % WEI_PER_ETH;
+    const decimalPart = (remainder * SCALE) / WEI_PER_ETH;
+    const balanceEth = `${integerPart}.${decimalPart.toString().padStart(6, '0')}`;
+
+    return { address, balanceWei: balanceWei.toString(), balanceEth };
+  });
+
+  return Promise.all(requests);
 }
 
 export default {
@@ -48,7 +91,9 @@ export default {
         endpoints: {
           '/': 'This information endpoint',
           '/health': 'Health check endpoint',
-          '/info': 'Project information'
+          '/info': 'Project information',
+          'GET /wave': 'Returns the 10 most recent wave sweep records',
+          'POST /wave': 'Initiates a wave sweep (requires X-Webhook-Secret header and proofOfWork body field)',
         }
       }), {
         headers: {
@@ -82,6 +127,127 @@ export default {
           'Content-Type': 'application/json',
           ...getCorsHeaders(request, env)
         }
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // GET /wave — return the 10 most recent wave sweep records
+    // -------------------------------------------------------------------------
+    if (url.pathname === '/wave' && request.method === 'GET') {
+      if (!env.DB) {
+        return new Response(JSON.stringify({ error: 'Database not configured' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      const result = await env.DB.prepare(
+        `SELECT id, initiated_by, proof_of_work, addresses_audited, balances_snapshot, created_at
+         FROM wave_sweeps
+         ORDER BY created_at DESC
+         LIMIT 10`
+      ).all();
+
+      return new Response(JSON.stringify({ sweeps: result.results }), {
+        headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /wave — initiate a wave sweep
+    //   • Requires X-Webhook-Secret header matching env.WEBHOOK_SECRET        → 401
+    //   • Requires non-empty proofOfWork string in request body               → 400
+    //   • Accepts optional addresses[] (≤20); fetches live ETH balances       → audit
+    // -------------------------------------------------------------------------
+    if (url.pathname === '/wave' && request.method === 'POST') {
+      // 1. Enforce webhook secret authorization
+      const incomingSecret = request.headers.get('X-Webhook-Secret');
+      if (!env.WEBHOOK_SECRET || incomingSecret !== env.WEBHOOK_SECRET) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      // 2. Parse and validate request body
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      const { initiatedBy, proofOfWork, addresses } = body;
+
+      // 3. Require non-empty proofOfWork
+      if (!proofOfWork || typeof proofOfWork !== 'string' || proofOfWork.trim() === '') {
+        return new Response(JSON.stringify({ error: 'proofOfWork is required and must be a non-empty string' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      // 4. Validate addresses (optional, max 20)
+      const addrs = Array.isArray(addresses) ? addresses : [];
+      if (addrs.length > 20) {
+        return new Response(JSON.stringify({ error: 'addresses must not exceed 20 entries' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      if (!env.DB) {
+        return new Response(JSON.stringify({ error: 'Database not configured' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      // 5. Fetch live ETH balances for audited addresses
+      let balancesSnapshot = [];
+      if (addrs.length > 0 && env.ETH_RPC_URL) {
+        balancesSnapshot = await fetchEthBalances(addrs, env.ETH_RPC_URL);
+      }
+
+      // 6. Persist the sweep record
+      const waveId = crypto.randomUUID();
+      const now = new Date().toISOString();
+
+      await env.DB.prepare(
+        `INSERT INTO wave_sweeps (id, initiated_by, proof_of_work, addresses_audited, balances_snapshot, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).bind(
+        waveId,
+        initiatedBy || null,
+        proofOfWork.trim(),
+        JSON.stringify(addrs),
+        JSON.stringify(balancesSnapshot),
+        now,
+      ).run();
+
+      // 7. Persist individual balance records in a single batched transaction
+      if (balancesSnapshot.length > 0) {
+        const balanceInserts = balancesSnapshot.map((bal) =>
+          env.DB.prepare(
+            `INSERT OR REPLACE INTO balances (address, balance_eth, recorded_at) VALUES (?, ?, ?)`
+          ).bind(bal.address, bal.balanceEth, now)
+        );
+        await env.DB.batch(balanceInserts);
+      }
+
+      return new Response(JSON.stringify({
+        waveId,
+        proofOfWork: proofOfWork.trim(),
+        ethAudit: {
+          addressesAudited: addrs.length,
+          balancesSnapshot,
+        },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
       });
     }
 

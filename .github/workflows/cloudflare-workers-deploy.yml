@@ -18,20 +18,45 @@ jobs:
       contents: read
 
     steps:
-      # Checkout repository code
+      # Step 1 — Checkout repository code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Install dependencies if package.json exists
-      - name: Install dependencies
-        run: |
-          if [ -f package.json ]; then
-            npm install
-          fi
+      # Step 2 — Set up Node.js so that wrangler and npm scripts work correctly
+      - name: Set up Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
 
-      # Deploy to Cloudflare Workers using Wrangler action
+      # Step 3 — Install project dependencies (wrangler CLI, etc.)
+      - name: Install dependencies
+        run: npm install
+
+      # Step 4 — Apply D1 database migrations before deploying the worker.
+      #           This ensures the schema (wave_sweeps, balances, audit columns)
+      #           is up to date before any new worker code goes live.
+      #           Requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets
+      #           plus D1_DATABASE_ID set to the ID of the target D1 database.
+      - name: Apply D1 migrations
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # Substitute the real database ID into wrangler.toml before running migrations.
+          sed -i "s|<YOUR_D1_DATABASE_ID>|${{ secrets.D1_DATABASE_ID }}|g" wrangler.toml
+          npx wrangler d1 migrations apply go-ethereum-worker-db --remote
+
+      # Step 5 — Deploy the worker to Cloudflare.
+      #           WEBHOOK_SECRET and ETH_RPC_URL are pushed as encrypted Worker
+      #           secrets so they are never stored in wrangler.toml plaintext.
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          secrets: |
+            WEBHOOK_SECRET
+            ETH_RPC_URL
+        env:
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }}

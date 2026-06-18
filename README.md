@@ -295,9 +295,91 @@ To enable automatic deployment to Cloudflare Workers, you need to configure the 
 
 Once deployed, the Cloudflare Worker provides the following endpoints:
 
-- `/` - Information about the worker and available endpoints
-- `/health` - Health check endpoint
-- `/info` - Project information and links
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Information about the worker and available endpoints |
+| `GET` | `/health` | Health check endpoint |
+| `GET` | `/info` | Project information and links |
+| `GET` | `/wave` | Returns the 10 most recent wave sweep records |
+| `POST` | `/wave` | Initiates a wave sweep (see below) |
+
+#### `POST /wave` — Wave Sweep
+
+Initiates an authenticated wave sweep with an optional go-ethereum balance audit.
+
+**Required headers:**
+
+| Header | Description |
+|--------|-------------|
+| `X-Webhook-Secret` | Must match the `WEBHOOK_SECRET` environment variable — returns `401` on mismatch |
+| `Content-Type` | `application/json` |
+
+**Request body:**
+
+```json
+{
+  "initiatedBy": "ops-bot",
+  "proofOfWork": "closure-audit-ref-2026-06-18",
+  "addresses": ["0xabc...", "0xdef..."]
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `proofOfWork` | `string` | ✅ Yes | Traceable authorization reference — returns `400` if missing or empty |
+| `initiatedBy` | `string` | No | Human-readable identifier for the initiator |
+| `addresses` | `string[]` | No | Ethereum addresses to audit (max 20); live ETH balances are fetched via `eth_getBalance` |
+
+**Example:**
+
+```bash
+curl -X POST https://<worker>/wave \
+  -H "X-Webhook-Secret: $WEBHOOK_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "initiatedBy": "ops-bot",
+    "proofOfWork": "closure-audit-ref-2026-06-18",
+    "addresses": ["0xabc...", "0xdef..."]
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "waveId": "uuid",
+  "proofOfWork": "closure-audit-ref-2026-06-18",
+  "ethAudit": {
+    "addressesAudited": 2,
+    "balancesSnapshot": [
+      { "address": "0xabc...", "balanceWei": "1250000000000000000", "balanceEth": "1.250000" }
+    ]
+  }
+}
+```
+
+#### `GET /wave` — Recent Sweeps
+
+Returns the 10 most recent sweep records including `proof_of_work`, `addresses_audited`, and `balances_snapshot` for a tamper-evident audit trail.
+
+### Database Migrations
+
+The worker uses a Cloudflare D1 database. Apply migrations before (or after) first deploy:
+
+```shell
+# Create the D1 database (first time only)
+wrangler d1 create go-ethereum-worker-db
+
+# Apply all pending migrations
+npx wrangler d1 migrations apply go-ethereum-worker-db
+```
+
+Migrations live in the `migrations/` directory:
+
+| File | Description |
+|------|-------------|
+| `0001_initial.sql` | Creates `wave_sweeps` and `balances` tables |
+| `0002_wave_pow_audit.sql` | Adds `proof_of_work`, `addresses_audited`, `balances_snapshot` columns |
 
 ### Local Development
 
@@ -325,6 +407,18 @@ The worker configuration is defined in `wrangler.toml`. You can customize:
 - Routes and domains
 - Environment variables
 - Compatibility settings
+
+**Required secrets** (set via `wrangler secret put` — do **not** commit real values):
+
+| Variable | Description |
+|----------|-------------|
+| `WEBHOOK_SECRET` | Shared secret validated by the `X-Webhook-Secret` header on `POST /wave` |
+| `ETH_RPC_URL` | go-ethereum (or compatible) JSON-RPC endpoint used for `eth_getBalance` audits |
+
+```shell
+wrangler secret put WEBHOOK_SECRET
+wrangler secret put ETH_RPC_URL
+```
 
 **Security Note**: The worker includes CORS headers for cross-origin requests. For production use, you should configure allowed origins through environment variables in your `wrangler.toml`:
 

@@ -8,6 +8,24 @@ compatibility_date = "2024-01-01"
 # Configure worker settings
 workers_dev = true
 
+# D1 database binding used by the /wave endpoint.
+# Set database_id to the ID returned by `wrangler d1 create <name>`.
+[[d1_databases]]
+binding      = "DB"
+database_name = "go-ethereum-worker-db"
+database_id  = "<YOUR_D1_DATABASE_ID>"
+migrations_dir = "migrations"
+
+# Worker environment variables.
+# Override these values in your Cloudflare dashboard or with `wrangler secret put`.
+[vars]
+# Shared secret validated by the X-Webhook-Secret header on POST /wave.
+# Set via: wrangler secret put WEBHOOK_SECRET
+WEBHOOK_SECRET = ""
+# go-ethereum (or compatible) JSON-RPC endpoint used for eth_getBalance audits.
+# Example: https://mainnet.infura.io/v3/<PROJECT_ID>  or a self-hosted geth node.
+ETH_RPC_URL = ""
+
 # Environment-specific configuration
 [env.production]
 name = "go-ethereum-worker-production"
