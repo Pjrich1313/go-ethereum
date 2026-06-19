@@ -75,6 +75,9 @@ const WAVE_DEFAULT_LIMIT = 10;
 const WAVE_MAX_LIMIT = 100;
 const WAVE_DEFAULT_OFFSET = 0;
 
+const PAYOUT_DEFAULT_LIMIT = 10;
+const PAYOUT_MAX_LIMIT = 100;
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -99,6 +102,8 @@ export default {
           'GET /wave': 'Returns recent wave sweep records (supports ?limit and ?offset for pagination)',
           'POST /wave': 'Initiates a wave sweep (requires X-Webhook-Secret header and proofOfWork body field)',
           'GET /stats': 'Returns aggregated statistics: total sweeps, unique addresses audited, latest sweep timestamp',
+          'GET /payout': 'Returns recent payout records (supports ?limit and ?offset for pagination)',
+          'POST /payout': 'Records a payout request (requires X-Webhook-Secret header, recipientAddress, and amountEth)',
         }
       }), {
         headers: {
@@ -303,6 +308,127 @@ export default {
         },
       }), {
         status: 200,
+        headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // GET /payout — return recent payout records (paginated)
+    //   ?limit  — number of records to return (default 10, max 100)
+    //   ?offset — number of records to skip (default 0)
+    // -------------------------------------------------------------------------
+    if (url.pathname === '/payout' && request.method === 'GET') {
+      if (!env.DB) {
+        return new Response(JSON.stringify({ error: 'Database not configured' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      const rawLimit = parseInt(url.searchParams.get('limit') || String(PAYOUT_DEFAULT_LIMIT), 10);
+      const rawOffset = parseInt(url.searchParams.get('offset') || '0', 10);
+
+      const limit = Number.isNaN(rawLimit) || rawLimit < 1 ? PAYOUT_DEFAULT_LIMIT : Math.min(rawLimit, PAYOUT_MAX_LIMIT);
+      const offset = Number.isNaN(rawOffset) || rawOffset < 0 ? 0 : rawOffset;
+
+      const [result, countResult] = await env.DB.batch([
+        env.DB.prepare(
+          `SELECT id, recipient_address, amount_eth, status, initiated_by, note, created_at
+           FROM payouts
+           ORDER BY created_at DESC
+           LIMIT ? OFFSET ?`
+        ).bind(limit, offset),
+        env.DB.prepare(`SELECT COUNT(*) AS total FROM payouts`),
+      ]);
+
+      const total = countResult.results[0]?.total ?? 0;
+
+      return new Response(JSON.stringify({
+        payouts: result.results,
+        pagination: { limit, offset, total },
+      }), {
+        headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /payout — record a payout request
+    //   • Requires X-Webhook-Secret header matching env.WEBHOOK_SECRET        → 401
+    //   • Requires recipientAddress (non-empty string)                        → 400
+    //   • Requires amountEth (positive numeric string)                        → 400
+    //   • Optional: initiatedBy, note
+    // -------------------------------------------------------------------------
+    if (url.pathname === '/payout' && request.method === 'POST') {
+      // 1. Enforce webhook secret authorization
+      const incomingSecret = request.headers.get('X-Webhook-Secret');
+      if (!env.WEBHOOK_SECRET || incomingSecret !== env.WEBHOOK_SECRET) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      // 2. Parse request body
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      const { recipientAddress, amountEth, initiatedBy, note } = body;
+
+      // 3. Validate recipientAddress
+      if (!recipientAddress || typeof recipientAddress !== 'string' || recipientAddress.trim() === '') {
+        return new Response(JSON.stringify({ error: 'recipientAddress is required and must be a non-empty string' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      // 4. Validate amountEth (must be a positive number)
+      const parsedAmount = parseFloat(amountEth);
+      if (amountEth === undefined || amountEth === null || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+        return new Response(JSON.stringify({ error: 'amountEth is required and must be a positive number' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      if (!env.DB) {
+        return new Response(JSON.stringify({ error: 'Database not configured' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      // 5. Persist the payout record with status 'pending'
+      const payoutId = crypto.randomUUID();
+      const now = new Date().toISOString();
+
+      await env.DB.prepare(
+        `INSERT INTO payouts (id, recipient_address, amount_eth, status, initiated_by, note, created_at)
+         VALUES (?, ?, ?, 'pending', ?, ?, ?)`
+      ).bind(
+        payoutId,
+        recipientAddress.trim(),
+        String(parsedAmount),
+        initiatedBy || null,
+        note || null,
+        now,
+      ).run();
+
+      return new Response(JSON.stringify({
+        payoutId,
+        recipientAddress: recipientAddress.trim(),
+        amountEth: String(parsedAmount),
+        status: 'pending',
+        createdAt: now,
+      }), {
+        status: 201,
         headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
       });
     }
