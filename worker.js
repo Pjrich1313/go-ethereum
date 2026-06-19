@@ -77,6 +77,23 @@ const WAVE_DEFAULT_OFFSET = 0;
 
 const PAYOUT_DEFAULT_LIMIT = 10;
 const PAYOUT_MAX_LIMIT = 100;
+const PAYOUT_DEFAULT_OFFSET = 0;
+
+/**
+ * Parse and clamp pagination query parameters.
+ * @param {URLSearchParams} searchParams
+ * @param {number} defaultLimit
+ * @param {number} maxLimit
+ * @param {number} defaultOffset
+ * @returns {{ limit: number, offset: number }}
+ */
+function parsePaginationParams(searchParams, defaultLimit, maxLimit, defaultOffset) {
+  const rawLimit = parseInt(searchParams.get('limit') || String(defaultLimit), 10);
+  const rawOffset = parseInt(searchParams.get('offset') || String(defaultOffset), 10);
+  const limit = Number.isNaN(rawLimit) || rawLimit < 1 ? defaultLimit : Math.min(rawLimit, maxLimit);
+  const offset = Number.isNaN(rawOffset) || rawOffset < 0 ? defaultOffset : rawOffset;
+  return { limit, offset };
+}
 
 export default {
   async fetch(request, env, ctx) {
@@ -188,11 +205,9 @@ export default {
         });
       }
 
-      const rawLimit = parseInt(url.searchParams.get('limit') || String(WAVE_DEFAULT_LIMIT), 10);
-      const rawOffset = parseInt(url.searchParams.get('offset') || String(WAVE_DEFAULT_OFFSET), 10);
-
-      const limit = Number.isNaN(rawLimit) || rawLimit < 1 ? WAVE_DEFAULT_LIMIT : Math.min(rawLimit, WAVE_MAX_LIMIT);
-      const offset = Number.isNaN(rawOffset) || rawOffset < 0 ? WAVE_DEFAULT_OFFSET : rawOffset;
+      const { limit, offset } = parsePaginationParams(
+        url.searchParams, WAVE_DEFAULT_LIMIT, WAVE_MAX_LIMIT, WAVE_DEFAULT_OFFSET
+      );
 
       const [result, countResult] = await env.DB.batch([
         env.DB.prepare(
@@ -325,11 +340,9 @@ export default {
         });
       }
 
-      const rawLimit = parseInt(url.searchParams.get('limit') || String(PAYOUT_DEFAULT_LIMIT), 10);
-      const rawOffset = parseInt(url.searchParams.get('offset') || '0', 10);
-
-      const limit = Number.isNaN(rawLimit) || rawLimit < 1 ? PAYOUT_DEFAULT_LIMIT : Math.min(rawLimit, PAYOUT_MAX_LIMIT);
-      const offset = Number.isNaN(rawOffset) || rawOffset < 0 ? 0 : rawOffset;
+      const { limit, offset } = parsePaginationParams(
+        url.searchParams, PAYOUT_DEFAULT_LIMIT, PAYOUT_MAX_LIMIT, PAYOUT_DEFAULT_OFFSET
+      );
 
       const [result, countResult] = await env.DB.batch([
         env.DB.prepare(
@@ -389,7 +402,8 @@ export default {
         });
       }
 
-      // 4. Validate amountEth (must be a positive number)
+      // 4. Validate amountEth (must be a positive number); store as the original
+      //    string to preserve precision — do not round-trip through float.
       const parsedAmount = parseFloat(amountEth);
       if (amountEth === undefined || amountEth === null || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
         return new Response(JSON.stringify({ error: 'amountEth is required and must be a positive number' }), {
@@ -397,6 +411,7 @@ export default {
           headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
         });
       }
+      const amountEthStr = String(amountEth).trim();
 
       if (!env.DB) {
         return new Response(JSON.stringify({ error: 'Database not configured' }), {
@@ -415,7 +430,7 @@ export default {
       ).bind(
         payoutId,
         recipientAddress.trim(),
-        String(parsedAmount),
+        amountEthStr,
         initiatedBy || null,
         note || null,
         now,
@@ -424,7 +439,7 @@ export default {
       return new Response(JSON.stringify({
         payoutId,
         recipientAddress: recipientAddress.trim(),
-        amountEth: String(parsedAmount),
+        amountEth: amountEthStr,
         status: 'pending',
         createdAt: now,
       }), {
