@@ -1,12 +1,12 @@
 /**
  * Cloudflare Worker for go-ethereum
  *
- * This is a simple API endpoint that provides information about the go-ethereum project.
- * It can be extended to provide various functionalities such as:
- * - API endpoints for blockchain data
- * - Documentation server
- * - Status checks
- * - Webhook handlers
+ * Provides API endpoints for the go-ethereum project, including:
+ * - Blockchain data and ETH balance auditing
+ * - Wave sweep records (paginated)
+ * - Payout tracking (GET + POST)
+ * - Aggregated statistics (/stats)
+ * - Health check and project info
  */
 
 /**
