@@ -71,6 +71,10 @@ async function fetchEthBalances(addresses, rpcUrl) {
   return Promise.all(requests);
 }
 
+const WAVE_DEFAULT_LIMIT = 10;
+const WAVE_MAX_LIMIT = 100;
+const WAVE_DEFAULT_OFFSET = 0;
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -179,11 +183,11 @@ export default {
         });
       }
 
-      const rawLimit = parseInt(url.searchParams.get('limit') || '10', 10);
-      const rawOffset = parseInt(url.searchParams.get('offset') || '0', 10);
+      const rawLimit = parseInt(url.searchParams.get('limit') || String(WAVE_DEFAULT_LIMIT), 10);
+      const rawOffset = parseInt(url.searchParams.get('offset') || String(WAVE_DEFAULT_OFFSET), 10);
 
-      const limit = Number.isNaN(rawLimit) || rawLimit < 1 ? 10 : Math.min(rawLimit, 100);
-      const offset = Number.isNaN(rawOffset) || rawOffset < 0 ? 0 : rawOffset;
+      const limit = Number.isNaN(rawLimit) || rawLimit < 1 ? WAVE_DEFAULT_LIMIT : Math.min(rawLimit, WAVE_MAX_LIMIT);
+      const offset = Number.isNaN(rawOffset) || rawOffset < 0 ? WAVE_DEFAULT_OFFSET : rawOffset;
 
       const [result, countResult] = await env.DB.batch([
         env.DB.prepare(
