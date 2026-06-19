@@ -6,6 +6,7 @@
  * - Wave sweep records (paginated)
  * - Payout tracking (GET + POST)
  * - Aggregated statistics (/stats)
+ * - Block diff between two wave sweeps (/diff)
  * - Health check and project info
  */
 
@@ -119,6 +120,7 @@ export default {
           'GET /wave': 'Returns recent wave sweep records (supports ?limit and ?offset for pagination)',
           'POST /wave': 'Initiates a wave sweep (requires X-Webhook-Secret header and proofOfWork body field)',
           'GET /stats': 'Returns aggregated statistics: total sweeps, unique addresses audited, latest sweep timestamp',
+          'GET /diff': 'Returns balance diff between two wave sweeps (requires ?from and ?to sweep IDs)',
           'GET /payout': 'Returns recent payout records (supports ?limit and ?offset for pagination)',
           'POST /payout': 'Records a payout request (requires X-Webhook-Secret header, recipientAddress, and amountEth)',
         }
@@ -187,6 +189,109 @@ export default {
         totalSweeps: sweep.total_sweeps ?? 0,
         latestSweepAt: sweep.latest_sweep_at ?? null,
         uniqueAddressesAudited: balance.unique_addresses ?? 0,
+      }), {
+        headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // GET /diff — return balance diff between two wave sweeps
+    //   ?from — ID of the earlier sweep
+    //   ?to   — ID of the later sweep
+    //   Response includes: added[], removed[], changed[] (with before/after ETH),
+    //   and a summary of net changes.
+    // -------------------------------------------------------------------------
+    if (url.pathname === '/diff' && request.method === 'GET') {
+      const fromId = url.searchParams.get('from');
+      const toId = url.searchParams.get('to');
+
+      if (!fromId || !toId) {
+        return new Response(JSON.stringify({ error: 'Both ?from and ?to sweep IDs are required' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      if (!env.DB) {
+        return new Response(JSON.stringify({ error: 'Database not configured' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      const [fromRow, toRow] = await env.DB.batch([
+        env.DB.prepare(
+          `SELECT id, created_at, balances_snapshot FROM wave_sweeps WHERE id = ?`
+        ).bind(fromId),
+        env.DB.prepare(
+          `SELECT id, created_at, balances_snapshot FROM wave_sweeps WHERE id = ?`
+        ).bind(toId),
+      ]);
+
+      const fromSweep = fromRow.results[0];
+      const toSweep = toRow.results[0];
+
+      if (!fromSweep) {
+        return new Response(JSON.stringify({ error: `Sweep not found: ${fromId}` }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+      if (!toSweep) {
+        return new Response(JSON.stringify({ error: `Sweep not found: ${toId}` }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      // Parse snapshots — each is an array of { address, balanceWei, balanceEth }
+      const fromBalances = JSON.parse(fromSweep.balances_snapshot || '[]');
+      const toBalances = JSON.parse(toSweep.balances_snapshot || '[]');
+
+      // Build lookup maps keyed by address
+      const fromMap = Object.fromEntries(fromBalances.map((b) => [b.address.toLowerCase(), b]));
+      const toMap = Object.fromEntries(toBalances.map((b) => [b.address.toLowerCase(), b]));
+
+      const added = [];
+      const removed = [];
+      const changed = [];
+      const unchanged = [];
+
+      // Addresses present in the "to" sweep
+      for (const [addr, toEntry] of Object.entries(toMap)) {
+        if (!fromMap[addr]) {
+          added.push({ address: toEntry.address, balanceEth: toEntry.balanceEth });
+        } else {
+          const fromEntry = fromMap[addr];
+          if (fromEntry.balanceEth !== toEntry.balanceEth) {
+            changed.push({
+              address: toEntry.address,
+              before: { balanceEth: fromEntry.balanceEth },
+              after:  { balanceEth: toEntry.balanceEth },
+            });
+          } else {
+            unchanged.push({ address: toEntry.address, balanceEth: toEntry.balanceEth });
+          }
+        }
+      }
+
+      // Addresses only in the "from" sweep (no longer present)
+      for (const [addr, fromEntry] of Object.entries(fromMap)) {
+        if (!toMap[addr]) {
+          removed.push({ address: fromEntry.address, balanceEth: fromEntry.balanceEth });
+        }
+      }
+
+      return new Response(JSON.stringify({
+        from: { id: fromSweep.id, createdAt: fromSweep.created_at },
+        to:   { id: toSweep.id,   createdAt: toSweep.created_at },
+        summary: {
+          added:     added.length,
+          removed:   removed.length,
+          changed:   changed.length,
+          unchanged: unchanged.length,
+        },
+        diff: { added, removed, changed },
       }), {
         headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
       });
