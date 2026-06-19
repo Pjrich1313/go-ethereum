@@ -92,8 +92,9 @@ export default {
           '/': 'This information endpoint',
           '/health': 'Health check endpoint',
           '/info': 'Project information',
-          'GET /wave': 'Returns the 10 most recent wave sweep records',
+          'GET /wave': 'Returns recent wave sweep records (supports ?limit and ?offset for pagination)',
           'POST /wave': 'Initiates a wave sweep (requires X-Webhook-Secret header and proofOfWork body field)',
+          'GET /stats': 'Returns aggregated statistics: total sweeps, unique addresses audited, latest sweep timestamp',
         }
       }), {
         headers: {
@@ -131,7 +132,44 @@ export default {
     }
 
     // -------------------------------------------------------------------------
-    // GET /wave — return the 10 most recent wave sweep records
+    // GET /stats — return aggregated statistics from the D1 database
+    // -------------------------------------------------------------------------
+    if (url.pathname === '/stats' && request.method === 'GET') {
+      if (!env.DB) {
+        return new Response(JSON.stringify({ error: 'Database not configured' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      const [sweepStats, balanceStats] = await env.DB.batch([
+        env.DB.prepare(
+          `SELECT
+             COUNT(*) AS total_sweeps,
+             MAX(created_at) AS latest_sweep_at
+           FROM wave_sweeps`
+        ),
+        env.DB.prepare(
+          `SELECT COUNT(*) AS unique_addresses FROM balances`
+        ),
+      ]);
+
+      const sweep = sweepStats.results[0] || {};
+      const balance = balanceStats.results[0] || {};
+
+      return new Response(JSON.stringify({
+        totalSweeps: sweep.total_sweeps ?? 0,
+        latestSweepAt: sweep.latest_sweep_at ?? null,
+        uniqueAddressesAudited: balance.unique_addresses ?? 0,
+      }), {
+        headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // GET /wave — return recent wave sweep records (paginated)
+    //   ?limit  — number of records to return (default 10, max 100)
+    //   ?offset — number of records to skip (default 0)
     // -------------------------------------------------------------------------
     if (url.pathname === '/wave' && request.method === 'GET') {
       if (!env.DB) {
@@ -141,14 +179,28 @@ export default {
         });
       }
 
-      const result = await env.DB.prepare(
-        `SELECT id, initiated_by, proof_of_work, addresses_audited, balances_snapshot, created_at
-         FROM wave_sweeps
-         ORDER BY created_at DESC
-         LIMIT 10`
-      ).all();
+      const rawLimit = parseInt(url.searchParams.get('limit') || '10', 10);
+      const rawOffset = parseInt(url.searchParams.get('offset') || '0', 10);
 
-      return new Response(JSON.stringify({ sweeps: result.results }), {
+      const limit = Number.isNaN(rawLimit) || rawLimit < 1 ? 10 : Math.min(rawLimit, 100);
+      const offset = Number.isNaN(rawOffset) || rawOffset < 0 ? 0 : rawOffset;
+
+      const [result, countResult] = await env.DB.batch([
+        env.DB.prepare(
+          `SELECT id, initiated_by, proof_of_work, addresses_audited, balances_snapshot, created_at
+           FROM wave_sweeps
+           ORDER BY created_at DESC
+           LIMIT ? OFFSET ?`
+        ).bind(limit, offset),
+        env.DB.prepare(`SELECT COUNT(*) AS total FROM wave_sweeps`),
+      ]);
+
+      const total = countResult.results[0]?.total ?? 0;
+
+      return new Response(JSON.stringify({
+        sweeps: result.results,
+        pagination: { limit, offset, total },
+      }), {
         headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
       });
     }
