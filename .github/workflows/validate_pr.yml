@@ -16,7 +16,7 @@ jobs:
             const actor = context.payload.pull_request.user.login;
 
             // Skip spam check for bots — they use conventional commit prefixes legitimately.
-            if (actor.endsWith('[bot]') || actor === 'Copilot') {
+            if (actor.endsWith('[bot]')) {
               console.log(`✅ Skipping spam check for bot actor: ${actor}`);
             } else {
               const spamRegex = /^(feat|chore|fix)(\(.*\))?\s*:/i;

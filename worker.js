@@ -248,9 +248,9 @@ export default {
       const fromBalances = JSON.parse(fromSweep.balances_snapshot || '[]');
       const toBalances = JSON.parse(toSweep.balances_snapshot || '[]');
 
-      // Build lookup maps keyed by address
-      const fromMap = Object.fromEntries(fromBalances.map((b) => [b.address.toLowerCase(), b]));
-      const toMap = Object.fromEntries(toBalances.map((b) => [b.address.toLowerCase(), b]));
+      // Build lookup maps keyed by lowercase address
+      const fromMap = new Map(fromBalances.map((b) => [b.address.toLowerCase(), b]));
+      const toMap = new Map(toBalances.map((b) => [b.address.toLowerCase(), b]));
 
       const added = [];
       const removed = [];
@@ -258,12 +258,13 @@ export default {
       const unchanged = [];
 
       // Addresses present in the "to" sweep
-      for (const [addr, toEntry] of Object.entries(toMap)) {
-        if (!fromMap[addr]) {
+      for (const [addr, toEntry] of toMap) {
+        if (!fromMap.has(addr)) {
           added.push({ address: toEntry.address, balanceEth: toEntry.balanceEth });
         } else {
-          const fromEntry = fromMap[addr];
-          if (fromEntry.balanceEth !== toEntry.balanceEth) {
+          const fromEntry = fromMap.get(addr);
+          // Compare by raw wei value (integer string) to avoid floating-point imprecision
+          if (fromEntry.balanceWei !== toEntry.balanceWei) {
             changed.push({
               address: toEntry.address,
               before: { balanceEth: fromEntry.balanceEth },
@@ -276,8 +277,8 @@ export default {
       }
 
       // Addresses only in the "from" sweep (no longer present)
-      for (const [addr, fromEntry] of Object.entries(fromMap)) {
-        if (!toMap[addr]) {
+      for (const [addr, fromEntry] of fromMap) {
+        if (!toMap.has(addr)) {
           removed.push({ address: fromEntry.address, balanceEth: fromEntry.balanceEth });
         }
       }
@@ -291,7 +292,7 @@ export default {
           changed:   changed.length,
           unchanged: unchanged.length,
         },
-        diff: { added, removed, changed },
+        diff: { added, removed, changed, unchanged },
       }), {
         headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
       });
