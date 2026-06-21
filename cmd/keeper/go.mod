@@ -33,8 +33,8 @@ require (
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
-	golang.org/x/sync v0.12.0 // indirect
-	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/sys v0.40.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
