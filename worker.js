@@ -121,6 +121,7 @@ export default {
           'GET /stats': 'Returns aggregated statistics: total sweeps, unique addresses audited, latest sweep timestamp',
           'GET /payout': 'Returns recent payout records (supports ?limit and ?offset for pagination)',
           'POST /payout': 'Records a payout request (requires X-Webhook-Secret header, recipientAddress, and amountEth)',
+          'PATCH /payout/:id': 'Updates a payout record status (requires X-Webhook-Secret header; body: status, optional note)',
         }
       }), {
         headers: {
@@ -444,6 +445,88 @@ export default {
         createdAt: now,
       }), {
         status: 201,
+        headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // PATCH /payout/:id — update a payout record's status (and optional note)
+    //   • Requires X-Webhook-Secret header matching env.WEBHOOK_SECRET        → 401
+    //   • :id is the UUID of the payout record                                → 404 if not found
+    //   • Body: { status: 'pending'|'completed'|'failed', note?: string }     → 400 if invalid
+    // -------------------------------------------------------------------------
+    const patchPayoutMatch = url.pathname.match(/^\/payout\/([^/]+)$/);
+    if (patchPayoutMatch && request.method === 'PATCH') {
+      // 1. Enforce webhook secret authorization
+      const incomingSecret = request.headers.get('X-Webhook-Secret');
+      if (!env.WEBHOOK_SECRET || incomingSecret !== env.WEBHOOK_SECRET) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      const payoutId = patchPayoutMatch[1];
+
+      // 2. Parse request body
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      const { status, note } = body;
+
+      // 3. Validate status
+      const VALID_STATUSES = ['pending', 'completed', 'failed'];
+      if (!status || !VALID_STATUSES.includes(status)) {
+        return new Response(JSON.stringify({ error: `status is required and must be one of: ${VALID_STATUSES.join(', ')}` }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      if (!env.DB) {
+        return new Response(JSON.stringify({ error: 'Database not configured' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      // 4. Verify the payout exists
+      const existing = await env.DB.prepare(
+        `SELECT id FROM payouts WHERE id = ?`
+      ).bind(payoutId).first();
+
+      if (!existing) {
+        return new Response(JSON.stringify({ error: 'Payout not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      // 5. Apply the update
+      if (note !== undefined) {
+        await env.DB.prepare(
+          `UPDATE payouts SET status = ?, note = ? WHERE id = ?`
+        ).bind(status, note || null, payoutId).run();
+      } else {
+        await env.DB.prepare(
+          `UPDATE payouts SET status = ? WHERE id = ?`
+        ).bind(status, payoutId).run();
+      }
+
+      // 6. Return the updated record
+      const updated = await env.DB.prepare(
+        `SELECT id, recipient_address, amount_eth, status, initiated_by, note, created_at
+         FROM payouts WHERE id = ?`
+      ).bind(payoutId).first();
+
+      return new Response(JSON.stringify(updated), {
         headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
       });
     }
