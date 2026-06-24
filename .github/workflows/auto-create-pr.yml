@@ -47,7 +47,7 @@ jobs:
             const target = process.env.TARGET_BRANCH || 'main';
             const inputTitle = process.env.PR_TITLE;
             const inputBody = process.env.PR_BODY;
-            const title = inputTitle || `chore: merge ${source} into ${target}`;
+            const title = inputTitle || `.github: merge ${source} into ${target}`;
             const body = inputBody || `Automated PR to merge \`${source}\` into \`${target}\`.`;
 
             if (source === target) {
