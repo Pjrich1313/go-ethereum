@@ -15,6 +15,9 @@
 // that rejects obviously malformed payloads while accepting all real txs.
 const MIN_SIGNED_TX_HEX_LENGTH = 100;
 
+// Pre-compiled regex for validating a 0x-prefixed raw transaction hex string.
+const SIGNED_TX_REGEX = new RegExp(`^0x[0-9a-fA-F]{${MIN_SIGNED_TX_HEX_LENGTH},}$`);
+
 // Maximum number of records returned by the GET /transfer listing endpoint.
 const MAX_TRANSFER_RECORDS = 20;
 
@@ -338,10 +341,9 @@ export default {
       // Validate initiatedBy — must be a string if provided.
       const safeInitiatedBy = (initiatedBy && typeof initiatedBy === 'string') ? initiatedBy.trim() : null;
 
-      // 3. Require a non-empty 0x-prefixed hex string of at least 100 hex chars
+      // 3. Require a non-empty 0x-prefixed hex string of at least MIN_SIGNED_TX_HEX_LENGTH hex chars
       //    (a bare ETH transfer RLP-encodes to well over 100 characters).
-      const signedTxRegex = new RegExp(`^0x[0-9a-fA-F]{${MIN_SIGNED_TX_HEX_LENGTH},}$`);
-      if (!signedTx || typeof signedTx !== 'string' || !signedTxRegex.test(signedTx.trim())) {
+      if (!signedTx || typeof signedTx !== 'string' || !SIGNED_TX_REGEX.test(signedTx.trim())) {
         return new Response(JSON.stringify({ error: `signedTx is required and must be a 0x-prefixed hex string of at least ${MIN_SIGNED_TX_HEX_LENGTH} characters` }), {
           status: 400,
           headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
