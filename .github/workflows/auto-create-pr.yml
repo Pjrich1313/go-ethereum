@@ -95,12 +95,9 @@ jobs:
               core.notice(`Created PR #${result.data.number}`);
             } catch (error) {
               const status = error.status || error.response?.status;
-              const message = error.message || '';
-              if (status === 422 && (
-                message.includes('No commits between') ||
-                message.includes('A pull request already exists')
-              )) {
-                core.notice(`Skipping PR creation: ${message}`);
+              const message = error.response?.data?.message || error.message || '';
+              if (status === 422) {
+                core.notice(`Skipping PR creation due to validation response: ${message}`);
                 return;
               }
               throw error;
