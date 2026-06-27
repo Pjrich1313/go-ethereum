@@ -83,13 +83,25 @@ jobs:
               return;
             }
 
-            const result = await github.rest.pulls.create({
-              owner,
-              repo,
-              head: source,
-              base: target,
-              title,
-              body,
-            });
-
-            core.notice(`Created PR #${result.data.number}`);
+            try {
+              const result = await github.rest.pulls.create({
+                owner,
+                repo,
+                head: source,
+                base: target,
+                title,
+                body,
+              });
+              core.notice(`Created PR #${result.data.number}`);
+            } catch (error) {
+              const status = error.status || error.response?.status;
+              const message = error.message || '';
+              if (status === 422 && (
+                message.includes('No commits between') ||
+                message.includes('A pull request already exists')
+              )) {
+                core.notice(`Skipping PR creation: ${message}`);
+                return;
+              }
+              throw error;
+            }
