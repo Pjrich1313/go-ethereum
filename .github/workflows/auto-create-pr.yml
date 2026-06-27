@@ -58,14 +58,22 @@ jobs:
             try {
               await github.rest.repos.getBranch({ owner, repo, branch: source });
             } catch (error) {
-              core.warning(`Source branch does not exist: ${source}. Skipping. Error: ${error.message}`);
+              if (error.status === 404) {
+                core.warning(`Source branch does not exist: ${source}. Skipping.`);
+              } else {
+                core.setFailed(`Failed to look up source branch '${source}': ${error.message}`);
+              }
               return;
             }
 
             try {
               await github.rest.repos.getBranch({ owner, repo, branch: target });
             } catch (error) {
-              core.warning(`Target branch does not exist: ${target}. Skipping. Error: ${error.message}`);
+              if (error.status === 404) {
+                core.warning(`Target branch does not exist: ${target}. Skipping.`);
+              } else {
+                core.setFailed(`Failed to look up target branch '${target}': ${error.message}`);
+              }
               return;
             }
 
