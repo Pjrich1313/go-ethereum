@@ -94,8 +94,8 @@ jobs:
               });
               core.notice(`Created PR #${result.data.number}`);
             } catch (error) {
-              const status = error.status || error.response?.status;
-              const message = error.response?.data?.message || error.message || '';
+              const status = error?.status ?? error?.response?.status ?? null;
+              const message = error?.response?.data?.message || error?.message || 'Unknown validation error';
               if (status === 422) {
                 core.notice(`Skipping PR creation due to validation response: ${message}`);
                 return;
