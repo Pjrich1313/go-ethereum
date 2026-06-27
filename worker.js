@@ -273,12 +273,14 @@ export default {
         });
       }
 
+      // Use a parameterized query — MAX_TRANSFER_RECORDS is a numeric constant
+      // so it is safe, but using a bound parameter keeps the pattern consistent.
       const result = await env.DB.prepare(
         `SELECT id, initiated_by, tx_hash, status, created_at
          FROM transfers
          ORDER BY created_at DESC
-         LIMIT ${MAX_TRANSFER_RECORDS}`
-      ).all();
+         LIMIT ?`
+      ).bind(MAX_TRANSFER_RECORDS).all();
 
       return new Response(JSON.stringify({ transfers: result.results }), {
         headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
@@ -333,6 +335,9 @@ export default {
 
       const { signedTx, initiatedBy } = body;
 
+      // Validate initiatedBy — must be a string if provided.
+      const safeInitiatedBy = (initiatedBy && typeof initiatedBy === 'string') ? initiatedBy.trim() : null;
+
       // 3. Require a non-empty 0x-prefixed hex string of at least 100 hex chars
       //    (a bare ETH transfer RLP-encodes to well over 100 characters).
       const signedTxRegex = new RegExp(`^0x[0-9a-fA-F]{${MIN_SIGNED_TX_HEX_LENGTH},}$`);
@@ -366,7 +371,7 @@ export default {
 
       if (rpcData.error) {
         // Return only the message string to avoid leaking internal RPC details.
-        return new Response(JSON.stringify({ error: rpcData.error.message || 'RPC error' }), {
+        return new Response(JSON.stringify({ error: rpcData.error.message || 'Transaction broadcast failed' }), {
           status: 400,
           headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
         });
@@ -374,20 +379,27 @@ export default {
 
       const txHash = rpcData.result;
 
-      // 5. Audit the transfer in D1
+      // 5. Audit the transfer in D1; wrap in try-catch so a DB failure does not
+      //    hide a successful broadcast — the txHash is still returned to the caller.
       const transferId = crypto.randomUUID();
       const now = new Date().toISOString();
 
-      await env.DB.prepare(
-        `INSERT INTO transfers (id, initiated_by, signed_tx, tx_hash, status, created_at)
-         VALUES (?, ?, ?, ?, 'submitted', ?)`
-      ).bind(
-        transferId,
-        initiatedBy || null,
-        signedTx.trim(),
-        txHash,
-        now,
-      ).run();
+      try {
+        await env.DB.prepare(
+          `INSERT INTO transfers (id, initiated_by, signed_tx, tx_hash, status, created_at)
+           VALUES (?, ?, ?, ?, 'submitted', ?)`
+        ).bind(
+          transferId,
+          safeInitiatedBy,
+          signedTx.trim(),
+          txHash,
+          now,
+        ).run();
+      } catch (dbErr) {
+        // Log the failure but still return the txHash — the transaction was
+        // already broadcast on-chain and cannot be undone.
+        console.error('Failed to audit transfer in D1:', dbErr);
+      }
 
       return new Response(JSON.stringify({ transferId, txHash }), {
         status: 200,
