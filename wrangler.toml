@@ -19,10 +19,10 @@ migrations_dir = "migrations"
 # Worker environment variables.
 # Override these values in your Cloudflare dashboard or with `wrangler secret put`.
 [vars]
-# Shared secret validated by the X-Webhook-Secret header on POST /wave.
+# Shared secret validated by the X-Webhook-Secret header on POST /wave and POST /transfer.
 # Set via: wrangler secret put WEBHOOK_SECRET
 WEBHOOK_SECRET = ""
-# go-ethereum (or compatible) JSON-RPC endpoint used for eth_getBalance audits.
+# go-ethereum (or compatible) JSON-RPC endpoint used for eth_getBalance audits and eth_sendRawTransaction.
 # Example: https://mainnet.infura.io/v3/<PROJECT_ID>  or a self-hosted geth node.
 ETH_RPC_URL = ""
 

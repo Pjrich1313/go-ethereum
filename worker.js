@@ -94,6 +94,8 @@ export default {
           '/info': 'Project information',
           'GET /wave': 'Returns the 10 most recent wave sweep records',
           'POST /wave': 'Initiates a wave sweep (requires X-Webhook-Secret header and proofOfWork body field)',
+          'GET /transfer': 'Returns the 20 most recent ETH transfer records',
+          'POST /transfer': 'Broadcasts a pre-signed ETH transaction (requires X-Webhook-Secret header and signedTx body field)',
         }
       }), {
         headers: {
@@ -246,6 +248,136 @@ export default {
           balancesSnapshot,
         },
       }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // GET /transfer — return the 20 most recent transfer records
+    // -------------------------------------------------------------------------
+    if (url.pathname === '/transfer' && request.method === 'GET') {
+      if (!env.DB) {
+        return new Response(JSON.stringify({ error: 'Database not configured' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      const result = await env.DB.prepare(
+        `SELECT id, initiated_by, tx_hash, status, created_at
+         FROM transfers
+         ORDER BY created_at DESC
+         LIMIT 20`
+      ).all();
+
+      return new Response(JSON.stringify({ transfers: result.results }), {
+        headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /transfer — broadcast a pre-signed ETH transaction
+    //   • Requires X-Webhook-Secret header matching env.WEBHOOK_SECRET        → 401
+    //   • Requires non-empty signedTx (0x-prefixed raw tx hex) in request body → 400
+    //   • Calls eth_sendRawTransaction on env.ETH_RPC_URL                     → txHash
+    //   • Audits the submission in the transfers D1 table
+    //
+    // The caller is responsible for signing the transaction offline (e.g. with
+    // ethers.js or cast) and passing the resulting raw hex here.  The worker
+    // never holds a private key.
+    // -------------------------------------------------------------------------
+    if (url.pathname === '/transfer' && request.method === 'POST') {
+      // 1. Enforce webhook secret authorization
+      const incomingSecret = request.headers.get('X-Webhook-Secret');
+      if (!env.WEBHOOK_SECRET || incomingSecret !== env.WEBHOOK_SECRET) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      if (!env.ETH_RPC_URL) {
+        return new Response(JSON.stringify({ error: 'ETH_RPC_URL is not configured' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      if (!env.DB) {
+        return new Response(JSON.stringify({ error: 'Database not configured' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      // 2. Parse and validate request body
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      const { signedTx, initiatedBy } = body;
+
+      // 3. Require a non-empty 0x-prefixed hex string
+      if (!signedTx || typeof signedTx !== 'string' || !/^0x[0-9a-fA-F]+$/.test(signedTx.trim())) {
+        return new Response(JSON.stringify({ error: 'signedTx is required and must be a 0x-prefixed hex string' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      // 4. Broadcast via eth_sendRawTransaction
+      const rpcResponse = await fetch(env.ETH_RPC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'eth_sendRawTransaction',
+          params: [signedTx.trim()],
+          id: 1,
+        }),
+      });
+
+      if (!rpcResponse.ok) {
+        return new Response(JSON.stringify({ error: `RPC request failed: HTTP ${rpcResponse.status}` }), {
+          status: 502,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      const rpcData = await rpcResponse.json();
+
+      if (rpcData.error) {
+        return new Response(JSON.stringify({ error: rpcData.error.message || 'RPC error', rpcError: rpcData.error }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
+        });
+      }
+
+      const txHash = rpcData.result;
+
+      // 5. Audit the transfer in D1
+      const transferId = crypto.randomUUID();
+      const now = new Date().toISOString();
+
+      await env.DB.prepare(
+        `INSERT INTO transfers (id, initiated_by, signed_tx, tx_hash, status, created_at)
+         VALUES (?, ?, ?, ?, 'submitted', ?)`
+      ).bind(
+        transferId,
+        initiatedBy || null,
+        signedTx.trim(),
+        txHash,
+        now,
+      ).run();
+
+      return new Response(JSON.stringify({ transferId, txHash }), {
         status: 200,
         headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
       });

@@ -1,10 +1,10 @@
 name: Deploy to Cloudflare Workers
 
-# Trigger on push to main branch
+# Trigger on push to master branch
 on:
   push:
     branches:
-      - main
+      - master
   # Allow manual workflow dispatch for testing
   workflow_dispatch:
 
