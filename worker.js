@@ -9,6 +9,15 @@
  * - Webhook handlers
  */
 
+// Minimum length (in hex characters, excluding the '0x' prefix) that a
+// RLP-encoded Ethereum transaction must have.  A bare ETH value transfer
+// (type-0, no data) encodes to roughly 110+ hex chars; 100 is a safe floor
+// that rejects obviously malformed payloads while accepting all real txs.
+const MIN_SIGNED_TX_HEX_LENGTH = 100;
+
+// Maximum number of records returned by the GET /transfer listing endpoint.
+const MAX_TRANSFER_RECORDS = 20;
+
 /**
  * Generate CORS headers for the response
  * In production, configure allowed origins in your wrangler.toml environment variables.
@@ -94,7 +103,7 @@ export default {
           '/info': 'Project information',
           'GET /wave': 'Returns the 10 most recent wave sweep records',
           'POST /wave': 'Initiates a wave sweep (requires X-Webhook-Secret header and proofOfWork body field)',
-          'GET /transfer': 'Returns the 20 most recent ETH transfer records',
+          'GET /transfer': `Returns the ${MAX_TRANSFER_RECORDS} most recent ETH transfer records`,
           'POST /transfer': 'Broadcasts a pre-signed ETH transaction (requires X-Webhook-Secret header and signedTx body field)',
         }
       }), {
@@ -268,7 +277,7 @@ export default {
         `SELECT id, initiated_by, tx_hash, status, created_at
          FROM transfers
          ORDER BY created_at DESC
-         LIMIT 20`
+         LIMIT ${MAX_TRANSFER_RECORDS}`
       ).all();
 
       return new Response(JSON.stringify({ transfers: result.results }), {
@@ -324,9 +333,11 @@ export default {
 
       const { signedTx, initiatedBy } = body;
 
-      // 3. Require a non-empty 0x-prefixed hex string
-      if (!signedTx || typeof signedTx !== 'string' || !/^0x[0-9a-fA-F]+$/.test(signedTx.trim())) {
-        return new Response(JSON.stringify({ error: 'signedTx is required and must be a 0x-prefixed hex string' }), {
+      // 3. Require a non-empty 0x-prefixed hex string of at least 100 hex chars
+      //    (a bare ETH transfer RLP-encodes to well over 100 characters).
+      const signedTxRegex = new RegExp(`^0x[0-9a-fA-F]{${MIN_SIGNED_TX_HEX_LENGTH},}$`);
+      if (!signedTx || typeof signedTx !== 'string' || !signedTxRegex.test(signedTx.trim())) {
+        return new Response(JSON.stringify({ error: `signedTx is required and must be a 0x-prefixed hex string of at least ${MIN_SIGNED_TX_HEX_LENGTH} characters` }), {
           status: 400,
           headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
         });
@@ -354,7 +365,8 @@ export default {
       const rpcData = await rpcResponse.json();
 
       if (rpcData.error) {
-        return new Response(JSON.stringify({ error: rpcData.error.message || 'RPC error', rpcError: rpcData.error }), {
+        // Return only the message string to avoid leaking internal RPC details.
+        return new Response(JSON.stringify({ error: rpcData.error.message || 'RPC error' }), {
           status: 400,
           headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request, env) },
         });
